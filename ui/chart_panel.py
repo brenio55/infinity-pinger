@@ -32,7 +32,7 @@ TEXT     = "#8888AA"
 LOSS_CLR = "#CC1122"
 
 # Layout
-MIN_ROW_H  = 100   # px minimo por subplot host
+MIN_ROW_H  = 120   # px minimo por subplot (comporta labels de hora)
 TIMELINE_H = 32    # px para o eixo de tempo
 TOP_PAD    = 5
 BOT_PAD    = 5
@@ -170,7 +170,7 @@ class ChartPanel(ctk.CTkFrame):
             ax = self._fig.add_subplot(gs[i])
             ax.set_facecolor(PANEL)
             ax.tick_params(colors=TEXT, labelsize=7, length=2, pad=2)
-            ax.tick_params(axis="x", labelbottom=False)
+            ax.tick_params(axis="x", colors=TEXT, labelsize=6, rotation=0)
             for sp in ax.spines.values():
                 sp.set_color(GRID)
                 sp.set_linewidth(0.5)
@@ -272,13 +272,24 @@ class ChartPanel(ctk.CTkFrame):
             ax.cla()
             ax.set_facecolor(PANEL)
             ax.tick_params(colors=TEXT, labelsize=7, length=2, pad=2)
-            ax.tick_params(axis="x", labelbottom=False)
+            ax.tick_params(axis="x", colors=TEXT, labelsize=6, rotation=0)
             for sp in ax.spines.values():
                 sp.set_color(GRID)
                 sp.set_linewidth(0.5)
             ax.grid(True, color=GRID, linewidth=0.5, linestyle="-")
             ax.set_ylabel("ms", fontsize=7, color=TEXT, labelpad=2)
             ax.set_xlim(dt_min, dt_max)
+
+            # Formato do eixo X adaptado à janela de tempo
+            if self._view_sec <= 120:
+                ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
+                ax.xaxis.set_major_locator(mdates.SecondLocator(bysecond=range(0, 60, 30)))
+            elif self._view_sec <= 600:
+                ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+                ax.xaxis.set_major_locator(mdates.MinuteLocator(byminute=range(0, 60, 2)))
+            else:
+                ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+                ax.xaxis.set_major_locator(mdates.MinuteLocator(byminute=range(0, 60, 5)))
 
             y_top = max(mx * 1.15, Y_MIN_MS) if mx is not None else Y_MIN_MS
             ax.set_ylim(0, y_top)
