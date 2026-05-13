@@ -25,8 +25,10 @@ GRID     = "#1C1E2C"     # linhas de grade
 TEXT     = "#8888AA"     # labels dos eixos
 DIVIDER  = "#1C1E2C"     # linha divisória entre hosts
 
-ROW_H_PX    = 110        # altura de cada subplot em pixels
+ROW_H_PX    = 140        # altura de cada subplot em pixels (comporta 1000ms + titulo)
+GAP_PX      = 20         # espaco entre subplots em pixels
 REFRESH_MS  = 900
+Y_MIN_MS    = 1000       # escala minima do eixo Y (ms)
 
 
 class ChartPanel(ctk.CTkFrame):
@@ -99,7 +101,8 @@ class ChartPanel(ctk.CTkFrame):
             w_px = 800
         dpi   = 96
         w_in  = max(w_px / dpi, 4)
-        h_in  = (n * ROW_H_PX) / dpi
+        total_h = n * ROW_H_PX + max(n - 1, 0) * GAP_PX
+        h_in  = total_h / dpi
 
         # Destrói canvas anterior
         if self._mpl_canvas:
@@ -127,19 +130,27 @@ class ChartPanel(ctk.CTkFrame):
             ax.set_ylabel("ms", fontsize=7, color=TEXT, labelpad=2)
             self._axes[host] = ax
 
+        # hspace em fracao da altura media dos axes
+        # axes_h_px = ROW_H_PX - margem_titulo (~25px) = ~115px
+        # hspace = GAP_PX / axes_h_px
+        axes_h_px = ROW_H_PX - 25
+        hspace = GAP_PX / max(axes_h_px, 1)
+
         self._fig.subplots_adjust(
             left=0.06, right=0.99,
-            top=0.97, bottom=0.05,
-            hspace=0.08,
+            top=0.97, bottom=0.03,
+            hspace=hspace,
         )
 
+        # Altura total: N subplots + (N-1) gaps
+        total_h = n * ROW_H_PX + max(n - 1, 0) * GAP_PX
         self._mpl_canvas = FigureCanvasTkAgg(self._fig, master=self._inner)
         self._mpl_canvas.get_tk_widget().pack(fill="both", expand=True)
         self._mpl_canvas.draw()
 
         # Atualiza scroll region
         self._tk_canvas.configure(
-            scrollregion=(0, 0, w_px, n * ROW_H_PX)
+            scrollregion=(0, 0, w_px, total_h)
         )
 
     # ── Controle de refresh ───────────────────────────────────
@@ -188,6 +199,8 @@ class ChartPanel(ctk.CTkFrame):
             lat_list = data["latencies"]
             loss     = data["loss_pct"]
             avg      = data["avg_ms"]
+            mx       = data["max_ms"]
+            paused   = data.get("paused", False)
             cur      = lat_list[-1] if lat_list else None
 
             ax.cla()
@@ -199,11 +212,26 @@ class ChartPanel(ctk.CTkFrame):
             ax.grid(True, color=GRID, linewidth=0.5, linestyle="-")
             ax.set_ylabel("ms", fontsize=7, color=TEXT, labelpad=2)
 
-            if ts_list:
+            # Escala Y: minimo de Y_MIN_MS, ou max_val com margem
+            if mx is not None and mx > Y_MIN_MS:
+                y_top = mx * 1.15
+            else:
+                y_top = Y_MIN_MS
+            ax.set_ylim(0, y_top)
+
+            if paused:
+                # Host pausado: mostra aviso centralizado
+                ax.text(
+                    0.5, 0.5, "PAUSADO",
+                    transform=ax.transAxes,
+                    ha="center", va="center",
+                    fontsize=10, color="#334455",
+                    fontweight="bold",
+                )
+            elif ts_list:
                 datetimes = [datetime.fromtimestamp(t) for t in ts_list]
                 lats = [l if l is not None else float("nan") for l in lat_list]
 
-                # Área preenchida sob a linha
                 ax.fill_between(
                     datetimes, lats,
                     alpha=0.15, color=color,
@@ -214,7 +242,6 @@ class ChartPanel(ctk.CTkFrame):
                     solid_capstyle="round",
                 )
 
-                # Timeouts → barras verticais vermelhas
                 for i, lat in enumerate(lat_list):
                     if lat is None and i < len(datetimes):
                         ax.axvline(
@@ -225,31 +252,26 @@ class ChartPanel(ctk.CTkFrame):
                 ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
                 ax.tick_params(axis="x", labelsize=6, rotation=0)
 
-            # ── Label do host (canto superior esquerdo) ───────
+            # ── Titulo do subplot ────────────────────────────
+            label_color = "#334455" if paused else color
             loss_color = (
                 "#33CC66" if loss == 0 else
                 "#FFAA00" if loss <= 10 else
                 "#FF3344"
             )
-            cur_str = f"{cur:.0f} ms" if cur is not None else "—"
-            avg_str = f"avg {avg:.0f}" if avg is not None else ""
-            label = (
-                f"  {host}    "
-                f"{cur_str}    "
-                f"{avg_str}    "
-                f"loss {loss:.0f}%"
-            )
+            cur_str = f"{cur:.0f} ms" if cur is not None and not paused else ("pausado" if paused else "—")
+            avg_str = f"avg {avg:.0f}" if avg is not None and not paused else ""
+
             ax.set_title(
-                label,
+                f"  {host}    {cur_str}    {avg_str}",
                 loc="left",
                 fontsize=8,
-                color=color,
+                color=label_color,
                 pad=3,
                 fontweight="bold",
             )
-            # Indicador de loss no título
             ax.set_title(
-                f"loss {loss:.0f}%  ",
+                f"loss {loss:.0f}%  " if not paused else "",
                 loc="right",
                 fontsize=7,
                 color=loss_color,

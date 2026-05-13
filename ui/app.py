@@ -134,6 +134,7 @@ class App(ctk.CTk):
             body,
             on_add=self._add_host,
             on_remove=self._remove_host,
+            on_toggle=self._toggle_host,
             fg_color=C_PANEL,
             width=190,
             corner_radius=0,
@@ -180,6 +181,15 @@ class App(ctk.CTk):
 
     def _remove_host(self, host: str):
         self._session.remove_host(host)
+
+    def _toggle_host(self, host: str) -> bool:
+        """Pausa ou retoma host. Retorna True se agora esta rodando."""
+        if self._session.is_paused(host):
+            self._session.resume_host(host)
+            return True   # agora rodando
+        else:
+            self._session.pause_host(host)
+            return False  # agora pausado
 
     def _start_session(self):
         if not self._session.hosts:
@@ -248,7 +258,9 @@ class App(ctk.CTk):
             # Dot colors na sidebar
             for host, data in snap.items():
                 self._host_panel.update_dot_color(
-                    host, data["color"], data["loss_pct"] > 0
+                    host, data["color"],
+                    data["loss_pct"] > 0,
+                    paused=data.get("paused", False),
                 )
 
             # Statusbar
