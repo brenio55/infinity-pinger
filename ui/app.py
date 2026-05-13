@@ -354,7 +354,7 @@ class App(ctk.CTk):
         # Autor
         ctk.CTkLabel(frame, text="Desenvolvido por:", 
                      font=ctk.CTkFont(size=12, weight="bold"), text_color="#DDDDDD").pack(pady=(0, 2))
-        ctk.CTkLabel(frame, text="Brenio Filho (brenio55 no GitHub)", 
+        ctk.CTkLabel(frame, text="Brenio Filho (github.com/brenio55)", 
                      font=ctk.CTkFont(size=12), text_color="#AAAAAA").pack(pady=(0, 15))
 
         # Orkestrae Link
