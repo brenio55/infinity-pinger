@@ -51,12 +51,10 @@ class App(ctk.CTk):
         self.configure(fg_color=C_BG)
 
         import os
-        from PIL import Image, ImageTk
-        self._logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logo.png")
-        if os.path.exists(self._logo_path):
+        self._icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "icon.ico")
+        if os.path.exists(self._icon_path):
             try:
-                self._icon_image = ImageTk.PhotoImage(file=self._logo_path)
-                self.wm_iconphoto(True, self._icon_image)
+                self.iconbitmap(self._icon_path)
             except Exception:
                 pass
 
