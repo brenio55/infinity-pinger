@@ -1,17 +1,20 @@
 """
 ui/chart_panel.py
-Painel central com gráfico matplotlib embedded no CustomTkinter.
-Atualização em tempo real via after() do Tkinter (thread-safe).
+Painel central com grafico matplotlib embedded no CustomTkinter.
+Atualizacao em tempo real via after() do Tkinter (thread-safe).
 """
 
+import warnings
 import time
 from datetime import datetime
 from typing import Callable
+import tkinter as tk
+
+warnings.filterwarnings("ignore", message=".*tight_layout.*")
 
 import customtkinter as ctk
 import matplotlib
 matplotlib.use("TkAgg")
-import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
@@ -56,25 +59,29 @@ class ChartPanel(ctk.CTkFrame):
             ax.xaxis.label.set_color(TEXT_CLR)
             ax.title.set_color("#DDDDFF")
 
-        self._ax_lat.set_title("Latência (ms)", fontsize=11, pad=6)
+        self._ax_lat.set_title("Latencia (ms)", fontsize=11, pad=6)
         self._ax_lat.set_ylabel("ms", fontsize=9)
 
         self._ax_loss.set_title("Perda de Pacotes (%)", fontsize=9, pad=4)
         self._ax_loss.set_ylabel("%", fontsize=9)
         self._ax_loss.set_ylim(-2, 105)
 
-        # Canvas embed
-        self._canvas = FigureCanvasTkAgg(self._fig, master=self)
-        self._canvas.get_tk_widget().pack(fill="both", expand=True)
+        # Frame nativo tk para isolar o matplotlib do CTkFrame
+        chart_container = tk.Frame(self, bg=BG_DARK)
+        chart_container.pack(fill="both", expand=True)
+
+        # Canvas matplotlib — nomeado _mpl_canvas para nao colidir com CTkFrame._canvas
+        self._mpl_canvas = FigureCanvasTkAgg(self._fig, master=chart_container)
+        self._mpl_canvas.get_tk_widget().pack(fill="both", expand=True)
 
         # Toolbar matplotlib (zoom, pan, save)
-        toolbar_frame = ctk.CTkFrame(self, fg_color="#0D0F1A", height=30)
+        toolbar_frame = tk.Frame(self, bg="#0D0F1A")
         toolbar_frame.pack(fill="x", side="bottom")
-        toolbar = NavigationToolbar2Tk(self._canvas, toolbar_frame)
+        toolbar = NavigationToolbar2Tk(self._mpl_canvas, toolbar_frame)
         toolbar.config(background="#0D0F1A")
         toolbar.update()
 
-    # ── Controle de atualização ───────────────────────────
+    # ── Controle de atualizacao ───────────────────────────
     def start_refresh(self):
         self._running = True
         self._schedule()
@@ -95,16 +102,16 @@ class ChartPanel(ctk.CTkFrame):
     def _refresh(self):
         try:
             snapshot = self.get_snapshot()
-            self._draw(snapshot)
+            self._render(snapshot)
         except Exception:
             pass
         self._schedule()
 
-    def _draw(self, snapshot: dict):
+    def _render(self, snapshot: dict):
         self._ax_lat.cla()
         self._ax_loss.cla()
 
-        # Re-aplicar estilos após cla()
+        # Re-aplicar estilos apos cla()
         for ax in (self._ax_lat, self._ax_loss):
             ax.set_facecolor(BG_PANEL)
             ax.tick_params(colors=TEXT_CLR, labelsize=8)
@@ -112,14 +119,14 @@ class ChartPanel(ctk.CTkFrame):
                 spine.set_color(GRID_CLR)
             ax.grid(True, color=GRID_CLR, linewidth=0.6, linestyle="--")
 
-        self._ax_lat.set_title("Latência (ms)", fontsize=11, pad=6, color="#DDDDFF")
+        self._ax_lat.set_title("Latencia (ms)", fontsize=11, pad=6, color="#DDDDFF")
         self._ax_lat.set_ylabel("ms", fontsize=9, color=TEXT_CLR)
         self._ax_loss.set_title("Perda de Pacotes (%)", fontsize=9, pad=4, color="#DDDDFF")
         self._ax_loss.set_ylabel("%", fontsize=9, color=TEXT_CLR)
         self._ax_loss.set_ylim(-2, 105)
 
         hosts = list(snapshot.keys())
-        loss_vals  = []
+        loss_vals   = []
         loss_colors = []
 
         for host, data in snapshot.items():
@@ -170,12 +177,15 @@ class ChartPanel(ctk.CTkFrame):
                         fontsize=7, color="#EEEEEE",
                     )
 
-        # Formato do eixo X de latência
+        # Formato do eixo X de latencia
         if any(snapshot.values()):
             self._ax_lat.xaxis.set_major_formatter(
                 mdates.DateFormatter("%H:%M:%S")
             )
-            self._fig.autofmt_xdate(rotation=25, ha="right")
+            try:
+                self._fig.autofmt_xdate(rotation=25, ha="right")
+            except Exception:
+                pass
 
         if hosts:
             self._ax_lat.legend(
@@ -184,10 +194,13 @@ class ChartPanel(ctk.CTkFrame):
                 labelcolor="#EEEEEE",
             )
 
-        self._fig.tight_layout(pad=1.0)
-        self._canvas.draw_idle()
+        try:
+            self._fig.tight_layout(pad=1.0)
+        except Exception:
+            pass
+        self._mpl_canvas.draw_idle()
 
     def redraw_now(self):
-        """Força redesenho imediato (ex: após salvar gráfico)."""
+        """Forca redesenho imediato."""
         snapshot = self.get_snapshot()
-        self._draw(snapshot)
+        self._render(snapshot)
