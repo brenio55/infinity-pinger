@@ -35,7 +35,7 @@ LOSS_CLR = "#CC1122"
 MIN_ROW_H  = 120   # px minimo por subplot (comporta labels de hora)
 TIMELINE_H = 32    # px para o eixo de tempo
 TOP_PAD    = 5
-BOT_PAD    = 5
+BOT_PAD    = 15
 GAP_PX     = 5
 REFRESH_MS = 900
 Y_MIN_MS   = 200
@@ -170,7 +170,7 @@ class ChartPanel(ctk.CTkFrame):
             ax = self._fig.add_subplot(gs[i])
             ax.set_facecolor(PANEL)
             ax.tick_params(colors=TEXT, labelsize=7, length=2, pad=2)
-            ax.tick_params(axis="x", colors=TEXT, labelsize=6, rotation=0)
+            ax.tick_params(axis="x", colors=TEXT, labelsize=6, rotation=0, direction="in", pad=-10)
             for sp in ax.spines.values():
                 sp.set_color(GRID)
                 sp.set_linewidth(0.5)
@@ -272,7 +272,7 @@ class ChartPanel(ctk.CTkFrame):
             ax.cla()
             ax.set_facecolor(PANEL)
             ax.tick_params(colors=TEXT, labelsize=7, length=2, pad=2)
-            ax.tick_params(axis="x", colors=TEXT, labelsize=6, rotation=0)
+            ax.tick_params(axis="x", colors=TEXT, labelsize=6, rotation=0, direction="in", pad=-10)
             for sp in ax.spines.values():
                 sp.set_color(GRID)
                 sp.set_linewidth(0.5)
