@@ -1,9 +1,9 @@
 """
-ui/app.py
-Janela principal do InfinityPinger.
+ui/app.py  (v2)
+Janela principal — design flat, compacto, sem bordas arredondadas.
+Stats integradas nos graficos por host.
 """
 
-import threading
 import customtkinter as ctk
 from tkinter import messagebox
 
@@ -12,210 +12,200 @@ from core.reporter import export_csv, export_png, export_pdf
 
 from ui.host_panel  import HostPanel
 from ui.chart_panel import ChartPanel
-from ui.stats_table import StatsTable
 from ui.dialogs     import SettingsDialog, ExportDialog
 
-
-# ── Configuração global do CTk ─────────────────────────
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 APP_NAME    = "InfinityPinger"
 APP_VERSION = "0.1.0"
 
+# ── Paleta flat ───────────────────────────────────────────────
+C_BG      = "#0E0F14"
+C_PANEL   = "#13151F"
+C_BORDER  = "#1C1E2C"
+C_ACCENT  = "#00B4D8"
+C_TEXT    = "#8888AA"
+C_BTN     = "#1A1C28"
+C_BTN_H   = "#22253A"
+
+
+def _btn(master, text, cmd, width=90, color=C_BTN, hover=C_BTN_H, **kw):
+    return ctk.CTkButton(
+        master, text=text, command=cmd,
+        width=width, height=28,
+        corner_radius=0,
+        fg_color=color, hover_color=hover,
+        font=ctk.CTkFont(size=11),
+        **kw,
+    )
+
 
 class App(ctk.CTk):
 
     def __init__(self):
         super().__init__()
-
         self.title(f"{APP_NAME}  v{APP_VERSION}")
-        self.geometry("1280x760")
-        self.minsize(900, 560)
-        self.configure(fg_color="#0A0C17")
+        self.geometry("1100x680")
+        self.minsize(800, 480)
+        self.configure(fg_color=C_BG)
 
-        # Tenta definir ícone (ignora se não existir)
         try:
             self.iconbitmap("assets/icon.ico")
         except Exception:
             pass
 
-        # ── Sessão ────────────────────────────────────────
         self._interval = 1.0
         self._timeout  = 2.0
-        self._session  = PingSession(
-            interval=self._interval,
-            timeout=self._timeout,
-        )
+        self._session  = PingSession(interval=self._interval, timeout=self._timeout)
 
-        # ── Build UI ──────────────────────────────────────
         self._build_toolbar()
-        self._build_main_area()
+        self._build_body()
         self._build_statusbar()
 
-        # Inicia o refresh do gráfico
         self._chart.start_refresh()
-
-        # Inicia atualização periódica da tabela e status
-        self._schedule_stats_update()
-
-        # Protocolo de fechamento
+        self._schedule_ui_update()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
-    # ═══════════════════════════════════════════════════
-    # TOOLBAR
-    # ═══════════════════════════════════════════════════
+    # ═════════════════════════════════════════════════════════
+    # TOOLBAR — altura 38px, flat
+    # ═════════════════════════════════════════════════════════
     def _build_toolbar(self):
-        tb = ctk.CTkFrame(self, fg_color="#0D0F1A", height=52, corner_radius=0)
+        tb = ctk.CTkFrame(self, fg_color=C_PANEL, height=38, corner_radius=0)
         tb.pack(fill="x", side="top")
         tb.pack_propagate(False)
 
-        # Logo / título
+        # Logo
         ctk.CTkLabel(
-            tb,
-            text=f"◈  {APP_NAME}",
-            font=ctk.CTkFont(size=18, weight="bold"),
-            text_color="#00B4D8",
-        ).pack(side="left", padx=16)
+            tb, text=f"◈ {APP_NAME}",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color=C_ACCENT,
+        ).pack(side="left", padx=(12, 16))
 
-        ctk.CTkFrame(tb, width=1, fg_color="#2A2A3E").pack(side="left", fill="y", pady=8, padx=4)
+        # Divisor vertical
+        ctk.CTkFrame(tb, width=1, height=20, fg_color=C_BORDER,
+                     corner_radius=0).pack(side="left", pady=9)
 
-        # Botões de ação
-        btn_defaults = dict(height=36, corner_radius=8, font=ctk.CTkFont(size=12))
-
-        self._btn_start = ctk.CTkButton(
-            tb, text="▶  Iniciar", width=110,
-            fg_color="#006400", hover_color="#228B22",
-            command=self._start_session, **btn_defaults,
+        # Botões primários
+        self._btn_start = _btn(
+            tb, "▶  Iniciar", self._start_session,
+            color="#0D3320", hover="#1A5532",
         )
-        self._btn_start.pack(side="left", padx=(12, 4), pady=8)
+        self._btn_start.pack(side="left", padx=(8, 2), pady=5)
 
-        self._btn_stop = ctk.CTkButton(
-            tb, text="■  Parar", width=110,
-            fg_color="#660000", hover_color="#8B0000",
+        self._btn_stop = _btn(
+            tb, "■  Parar", self._stop_session,
+            color="#2A0A0A", hover="#4A1515",
             state="disabled",
-            command=self._stop_session, **btn_defaults,
         )
-        self._btn_stop.pack(side="left", padx=4, pady=8)
+        self._btn_stop.pack(side="left", padx=2, pady=5)
 
-        ctk.CTkButton(
-            tb, text="🗑  Limpar", width=110,
-            fg_color="#2A2A3E", hover_color="#3A3A50",
-            command=self._clear_history, **btn_defaults,
-        ).pack(side="left", padx=4, pady=8)
+        _btn(tb, "⟳  Limpar", self._clear_history, width=80
+             ).pack(side="left", padx=2, pady=5)
 
-        ctk.CTkFrame(tb, width=1, fg_color="#2A2A3E").pack(side="left", fill="y", pady=8, padx=4)
+        # Divisor
+        ctk.CTkFrame(tb, width=1, height=20, fg_color=C_BORDER,
+                     corner_radius=0).pack(side="left", padx=8, pady=9)
 
-        ctk.CTkButton(
-            tb, text="💾  Salvar Relatório", width=150,
-            fg_color="#1B2A4A", hover_color="#243A60",
-            command=self._open_export_dialog, **btn_defaults,
-        ).pack(side="left", padx=4, pady=8)
+        _btn(tb, "💾  Exportar", self._open_export_dialog, width=95,
+             ).pack(side="left", padx=2, pady=5)
 
-        ctk.CTkButton(
-            tb, text="⚙  Config.", width=100,
-            fg_color="#2A2A3E", hover_color="#3A3A50",
-            command=self._open_settings, **btn_defaults,
-        ).pack(side="right", padx=12, pady=8)
+        # Config fica à direita
+        _btn(tb, "⚙", self._open_settings, width=34,
+             ).pack(side="right", padx=(4, 10), pady=5)
 
-    # ═══════════════════════════════════════════════════
-    # ÁREA PRINCIPAL
-    # ═══════════════════════════════════════════════════
-    def _build_main_area(self):
-        main = ctk.CTkFrame(self, fg_color="transparent")
-        main.pack(fill="both", expand=True, padx=0, pady=0)
+        # Status inline na toolbar (direita)
+        self._status_lbl = ctk.CTkLabel(
+            tb, text="● Parado",
+            font=ctk.CTkFont(size=11),
+            text_color="#555577",
+        )
+        self._status_lbl.pack(side="right", padx=8)
 
-        # ── Sidebar de hosts ──────────────────────────────
+    # ═════════════════════════════════════════════════════════
+    # CORPO — sidebar esquerda + área de gráficos
+    # ═════════════════════════════════════════════════════════
+    def _build_body(self):
+        body = ctk.CTkFrame(self, fg_color="transparent", corner_radius=0)
+        body.pack(fill="both", expand=True)
+
+        # ── Sidebar ───────────────────────────────────────────
         self._host_panel = HostPanel(
-            main,
-            on_add=self._session.add_host,
-            on_remove=self._session.remove_host,
-            fg_color="#0D0F1A",
-            width=220,
+            body,
+            on_add=self._add_host,
+            on_remove=self._remove_host,
+            fg_color=C_PANEL,
+            width=190,
             corner_radius=0,
         )
         self._host_panel.pack(side="left", fill="y")
 
-        ctk.CTkFrame(main, width=1, fg_color="#2A2A3E").pack(side="left", fill="y")
+        # Borda direita da sidebar
+        ctk.CTkFrame(body, width=1, fg_color=C_BORDER,
+                     corner_radius=0).pack(side="left", fill="y")
 
-        # ── Área direita: gráfico + tabela ────────────────
-        right = ctk.CTkFrame(main, fg_color="transparent")
-        right.pack(side="left", fill="both", expand=True)
-
+        # ── Área dos gráficos ─────────────────────────────────
         self._chart = ChartPanel(
-            right,
+            body,
             get_snapshot=self._session.get_snapshot,
-            fg_color="#0A0C17",
+            fg_color=C_BG,
+            corner_radius=0,
         )
-        self._chart.pack(fill="both", expand=True)
+        self._chart.pack(side="left", fill="both", expand=True)
 
-        ctk.CTkFrame(right, height=1, fg_color="#2A2A3E").pack(fill="x", pady=2)
-
-        # ── Painel inferior: tabela de stats ─────────────
-        stats_container = ctk.CTkFrame(right, fg_color="#0D0F1A", height=180)
-        stats_container.pack(fill="x", side="bottom")
-        stats_container.pack_propagate(False)
-
-        ctk.CTkLabel(
-            stats_container,
-            text="Estatísticas",
-            font=ctk.CTkFont(size=11, weight="bold"),
-            text_color="#888899", anchor="w",
-        ).pack(fill="x", padx=12, pady=(6, 0))
-
-        self._stats = StatsTable(stats_container, fg_color="transparent")
-        self._stats.pack(fill="both", expand=True, padx=4, pady=4)
-
-    # ═══════════════════════════════════════════════════
-    # STATUSBAR
-    # ═══════════════════════════════════════════════════
+    # ═════════════════════════════════════════════════════════
+    # STATUSBAR — altura 22px
+    # ═════════════════════════════════════════════════════════
     def _build_statusbar(self):
-        sb = ctk.CTkFrame(self, fg_color="#080A14", height=26, corner_radius=0)
+        sb = ctk.CTkFrame(self, fg_color="#0A0B10", height=22, corner_radius=0)
         sb.pack(fill="x", side="bottom")
         sb.pack_propagate(False)
 
-        self._status_lbl = ctk.CTkLabel(
-            sb, text="  ◉  Parado",
-            font=ctk.CTkFont(size=10),
-            text_color="#666688", anchor="w",
-        )
-        self._status_lbl.pack(side="left", padx=12)
-
-        self._hosts_lbl = ctk.CTkLabel(
+        self._sb_hosts = ctk.CTkLabel(
             sb, text="Hosts: 0",
-            font=ctk.CTkFont(size=10),
-            text_color="#666688",
+            font=ctk.CTkFont(size=9), text_color="#404060",
         )
-        self._hosts_lbl.pack(side="right", padx=12)
+        self._sb_hosts.pack(side="left", padx=10)
 
-    # ═══════════════════════════════════════════════════
+        ctk.CTkLabel(
+            sb, text=f"InfinityPinger v{APP_VERSION}",
+            font=ctk.CTkFont(size=9), text_color="#303050",
+        ).pack(side="right", padx=10)
+
+    # ═════════════════════════════════════════════════════════
     # AÇÕES
-    # ═══════════════════════════════════════════════════
+    # ═════════════════════════════════════════════════════════
+    def _add_host(self, host: str) -> bool:
+        return self._session.add_host(host)
+
+    def _remove_host(self, host: str):
+        self._session.remove_host(host)
+
     def _start_session(self):
-        hosts = self._session.hosts
-        if not hosts:
-            messagebox.showwarning("Sem hosts", "Adicione ao menos um host antes de iniciar.")
+        if not self._session.hosts:
+            messagebox.showwarning(
+                "Sem hosts", "Adicione ao menos um host antes de iniciar."
+            )
             return
         self._session.start()
         self._chart.start_refresh()
         self._btn_start.configure(state="disabled")
         self._btn_stop.configure(state="normal")
-        self._status_lbl.configure(text="  ◉  Rodando", text_color="#00B4D8")
+        self._status_lbl.configure(text="● Rodando", text_color=C_ACCENT)
 
     def _stop_session(self):
         self._session.stop()
         self._btn_start.configure(state="normal")
         self._btn_stop.configure(state="disabled")
-        self._status_lbl.configure(text="  ◉  Parado", text_color="#FF4466")
+        self._status_lbl.configure(text="● Parado", text_color="#883333")
 
     def _clear_history(self):
         self._session.clear_history()
-        self._stats.clear()
 
     def _open_export_dialog(self):
         snap = self._session.get_snapshot()
         if not snap:
-            messagebox.showwarning("Sem dados", "Nenhum dado disponível para exportar.")
+            messagebox.showwarning("Sem dados", "Nenhum dado para exportar.")
             return
         ExportDialog(
             self, snap,
@@ -235,7 +225,6 @@ class App(ctk.CTk):
     def _apply_settings(self, interval: float, timeout: float):
         self._interval = interval
         self._timeout  = timeout
-        # Recria a sessão com os novos parâmetros
         was_running = self._session.is_running
         hosts = list(self._session.hosts)
         self._session.stop()
@@ -245,33 +234,31 @@ class App(ctk.CTk):
         if was_running:
             self._session.start()
 
-    # ═══════════════════════════════════════════════════
-    # ATUALIZAÇÕES PERIÓDICAS
-    # ═══════════════════════════════════════════════════
-    def _schedule_stats_update(self):
-        self._update_stats()
-        self.after(1500, self._schedule_stats_update)
+    # ═════════════════════════════════════════════════════════
+    # ATUALIZAÇÕES UI PERIÓDICAS
+    # ═════════════════════════════════════════════════════════
+    def _schedule_ui_update(self):
+        self._update_ui()
+        self.after(1500, self._schedule_ui_update)
 
-    def _update_stats(self):
+    def _update_ui(self):
         try:
             snap = self._session.get_snapshot()
-            self._stats.update_data(snap)
 
-            # Atualiza dots no painel de hosts
+            # Dot colors na sidebar
             for host, data in snap.items():
                 self._host_panel.update_dot_color(
                     host, data["color"], data["loss_pct"] > 0
                 )
 
             # Statusbar
-            n = len(self._session.hosts)
-            self._hosts_lbl.configure(text=f"Hosts: {n}")
+            self._sb_hosts.configure(
+                text=f"Hosts: {len(self._session.hosts)}"
+            )
         except Exception:
             pass
 
-    # ═══════════════════════════════════════════════════
-    # FECHAMENTO
-    # ═══════════════════════════════════════════════════
+    # ═════════════════════════════════════════════════════════
     def _on_close(self):
         self._chart.stop_refresh()
         self._session.stop()
