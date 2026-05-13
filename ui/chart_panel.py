@@ -47,6 +47,10 @@ WINDOW_OPTIONS = {
     "15m":  900,
     "30m":  1800,
     "1h":   3600,
+    "3h":   10800,
+    "6h":   21600,
+    "12h":  43200,
+    "24h":  86400,
 }
 DEFAULT_WINDOW = "5m"
 
@@ -170,7 +174,7 @@ class ChartPanel(ctk.CTkFrame):
             ax = self._fig.add_subplot(gs[i])
             ax.set_facecolor(PANEL)
             ax.tick_params(colors=TEXT, labelsize=7, length=2, pad=2)
-            ax.tick_params(axis="x", colors=TEXT, labelsize=6, rotation=0, direction="in", pad=-10)
+            ax.tick_params(axis="x", colors=TEXT, labelsize=6, rotation=0, direction="in", pad=-20)
             for sp in ax.spines.values():
                 sp.set_color(GRID)
                 sp.set_linewidth(0.5)
@@ -287,9 +291,18 @@ class ChartPanel(ctk.CTkFrame):
             elif self._view_sec <= 600:
                 ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
                 ax.xaxis.set_major_locator(mdates.MinuteLocator(byminute=range(0, 60, 2)))
+            elif self._view_sec <= 3600:
+                ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+                ax.xaxis.set_major_locator(mdates.MinuteLocator(byminute=range(0, 60, 10)))
+            elif self._view_sec <= 10800:
+                ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+                ax.xaxis.set_major_locator(mdates.MinuteLocator(byminute=[0, 30]))
+            elif self._view_sec <= 21600:
+                ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+                ax.xaxis.set_major_locator(mdates.HourLocator(interval=1))
             else:
                 ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
-                ax.xaxis.set_major_locator(mdates.MinuteLocator(byminute=range(0, 60, 5)))
+                ax.xaxis.set_major_locator(mdates.HourLocator(interval=3))
 
             y_top = max(mx * 1.15, Y_MIN_MS) if mx is not None else Y_MIN_MS
             ax.set_ylim(0, y_top)
@@ -354,39 +367,30 @@ class ChartPanel(ctk.CTkFrame):
             ax_tl.set_xlim(dt_min, dt_max)
             ax_tl.set_ylim(0, 1)
 
-            # Major: multiplos de 10 min (fonte maior)
-            ax_tl.xaxis.set_major_locator(
-                mdates.MinuteLocator(byminute=range(0, 60, 10))
-            )
+            # Major/minor config default
             ax_tl.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
-            ax_tl.tick_params(axis="x", which="major",
-                              colors=TEXT, labelsize=8, length=5, pad=3)
+            ax_tl.tick_params(axis="x", which="major", colors=TEXT, labelsize=8, length=5, pad=3)
+            ax_tl.tick_params(axis="x", which="minor", colors=GRID, labelsize=0, length=3)
 
-            # Minor: 5 em 5 min (fonte menor, sem label)
-            ax_tl.xaxis.set_minor_locator(
-                mdates.MinuteLocator(byminute=range(0, 60, 5))
-            )
-            ax_tl.tick_params(axis="x", which="minor",
-                              colors=GRID, labelsize=0, length=3)
-
-            # Para janelas < 10 min, ajusta para segundos/minutos
+            # Ajuste de steps por janela de tempo
             if self._view_sec <= 120:
-                ax_tl.xaxis.set_major_locator(
-                    mdates.SecondLocator(bysecond=range(0, 60, 30))
-                )
                 ax_tl.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
-                ax_tl.xaxis.set_minor_locator(
-                    mdates.SecondLocator(bysecond=range(0, 60, 10))
-                )
+                ax_tl.xaxis.set_major_locator(mdates.SecondLocator(bysecond=range(0, 60, 30)))
+                ax_tl.xaxis.set_minor_locator(mdates.SecondLocator(bysecond=range(0, 60, 10)))
             elif self._view_sec <= 600:
-                ax_tl.xaxis.set_major_locator(
-                    mdates.MinuteLocator(byminute=range(0, 60, 2))
-                )
-                ax_tl.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
-                ax_tl.xaxis.set_minor_locator(
-                    mdates.MinuteLocator(byminute=range(0, 60, 1))
-                )
-                ax_tl.tick_params(axis="x", which="major",
-                                  colors=TEXT, labelsize=8, length=5)
+                ax_tl.xaxis.set_major_locator(mdates.MinuteLocator(byminute=range(0, 60, 2)))
+                ax_tl.xaxis.set_minor_locator(mdates.MinuteLocator(byminute=range(0, 60, 1)))
+            elif self._view_sec <= 3600:
+                ax_tl.xaxis.set_major_locator(mdates.MinuteLocator(byminute=range(0, 60, 10)))
+                ax_tl.xaxis.set_minor_locator(mdates.MinuteLocator(byminute=range(0, 60, 5)))
+            elif self._view_sec <= 10800:
+                ax_tl.xaxis.set_major_locator(mdates.MinuteLocator(byminute=[0, 30]))
+                ax_tl.xaxis.set_minor_locator(mdates.MinuteLocator(byminute=range(0, 60, 10)))
+            elif self._view_sec <= 21600:
+                ax_tl.xaxis.set_major_locator(mdates.HourLocator(interval=1))
+                ax_tl.xaxis.set_minor_locator(mdates.MinuteLocator(byminute=[0, 30]))
+            else:
+                ax_tl.xaxis.set_major_locator(mdates.HourLocator(interval=3))
+                ax_tl.xaxis.set_minor_locator(mdates.HourLocator(interval=1))
 
         self._mpl_canvas.draw_idle()
