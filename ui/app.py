@@ -78,7 +78,7 @@ class App(ctk.CTk):
             text_color="#00B4D8",
         ).pack(side="left", padx=16)
 
-        ctk.CTkSeparator(tb, orientation="vertical").pack(side="left", fill="y", pady=8)
+        ctk.CTkFrame(tb, width=1, fg_color="#2A2A3E").pack(side="left", fill="y", pady=8, padx=4)
 
         # Botões de ação
         btn_defaults = dict(height=36, corner_radius=8, font=ctk.CTkFont(size=12))
@@ -104,7 +104,7 @@ class App(ctk.CTk):
             command=self._clear_history, **btn_defaults,
         ).pack(side="left", padx=4, pady=8)
 
-        ctk.CTkSeparator(tb, orientation="vertical").pack(side="left", fill="y", pady=8, padx=4)
+        ctk.CTkFrame(tb, width=1, fg_color="#2A2A3E").pack(side="left", fill="y", pady=8, padx=4)
 
         ctk.CTkButton(
             tb, text="💾  Salvar Relatório", width=150,
@@ -136,7 +136,7 @@ class App(ctk.CTk):
         )
         self._host_panel.pack(side="left", fill="y")
 
-        ctk.CTkSeparator(main, orientation="vertical").pack(side="left", fill="y")
+        ctk.CTkFrame(main, width=1, fg_color="#2A2A3E").pack(side="left", fill="y")
 
         # ── Área direita: gráfico + tabela ────────────────
         right = ctk.CTkFrame(main, fg_color="transparent")
@@ -149,7 +149,7 @@ class App(ctk.CTk):
         )
         self._chart.pack(fill="both", expand=True)
 
-        ctk.CTkSeparator(right).pack(fill="x", pady=2)
+        ctk.CTkFrame(right, height=1, fg_color="#2A2A3E").pack(fill="x", pady=2)
 
         # ── Painel inferior: tabela de stats ─────────────
         stats_container = ctk.CTkFrame(right, fg_color="#0D0F1A", height=180)

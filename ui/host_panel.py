@@ -36,7 +36,7 @@ class HostPanel(ctk.CTkFrame):
             anchor="w"
         ).pack(fill="x", padx=12, pady=(12, 4))
 
-        ctk.CTkSeparator(self).pack(fill="x", padx=8, pady=4)
+        ctk.CTkFrame(self, height=1, fg_color="#2A2A3E").pack(fill="x", padx=8, pady=4)
 
         # ── Input + botão add ─────────────────────────────
         input_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -57,7 +57,7 @@ class HostPanel(ctk.CTkFrame):
             font=ctk.CTkFont(size=14, weight="bold"),
         ).pack(side="left")
 
-        ctk.CTkSeparator(self).pack(fill="x", padx=8, pady=6)
+        ctk.CTkFrame(self, height=1, fg_color="#2A2A3E").pack(fill="x", padx=8, pady=6)
 
         # ── Área de scroll com a lista ────────────────────
         self._list_frame = ctk.CTkScrollableFrame(
