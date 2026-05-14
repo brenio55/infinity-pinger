@@ -43,7 +43,8 @@ class PingSession:
 
         self._lock = threading.Lock()
         self._pingers: dict[str, HostPinger] = {}   # host → pinger
-        self._colors: dict[str, str] = {}            # host → cor
+        self._colors:  dict[str, str] = {}           # host → cor
+        self._paused:  set[str] = set()              # hosts pausados
         self._running = False
 
     # ── Controle da sessão ────────────────────────────────
@@ -52,22 +53,22 @@ class PingSession:
         return self._running
 
     def start(self):
-        """Inicia todos os pingers cadastrados."""
+        """Inicia todos os pingers não-pausados."""
         with self._lock:
             self._running = True
-            for pinger in self._pingers.values():
-                if not pinger.is_alive():
+            for host, pinger in self._pingers.items():
+                if host not in self._paused and not pinger.is_alive():
                     pinger.start()
 
     def stop(self):
-        """Para todos os pingers e aguarda encerramento."""
+        """Para todos os pingers."""
         with self._lock:
             self._running = False
             for pinger in self._pingers.values():
                 pinger.stop()
 
     def clear_history(self):
-        """Limpa o histórico de todos os hosts sem parar os pingers."""
+        """Limpa histórico de todos os hosts sem parar os pingers."""
         with self._lock:
             for pinger in self._pingers.values():
                 pinger.history.clear()
@@ -97,7 +98,7 @@ class PingSession:
             )
             self._pingers[host] = pinger
 
-            if self._running:
+            if self._running and host not in self._paused:
                 pinger.start()
             return True
 
@@ -106,8 +107,41 @@ class PingSession:
         with self._lock:
             pinger = self._pingers.pop(host, None)
             self._colors.pop(host, None)
+            self._paused.discard(host)
         if pinger:
             pinger.stop()
+
+    # ── Controle individual por host ──────────────────────
+    def pause_host(self, host: str):
+        """Para o pinger de um host específico."""
+        with self._lock:
+            pinger = self._pingers.get(host)
+            if pinger and pinger.is_alive():
+                pinger.stop()
+            self._paused.add(host)
+
+    def resume_host(self, host: str):
+        """Reinicia o pinger de um host específico."""
+        with self._lock:
+            if host not in self._pingers:
+                return
+            self._paused.discard(host)
+            if not self._running:
+                return
+            # Thread Python não é reutilizável após stop — cria novo
+            old = self._pingers[host]
+            pinger = HostPinger(
+                host=host,
+                interval=self.interval,
+                timeout=self.timeout,
+                on_result=self._on_ping_result,
+            )
+            pinger.history = old.history   # preserva histórico
+            self._pingers[host] = pinger
+            pinger.start()
+
+    def is_paused(self, host: str) -> bool:
+        return host in self._paused
 
     @property
     def hosts(self) -> list[str]:
@@ -139,6 +173,7 @@ class PingSession:
                     "min_ms":    pinger.min_ms,
                     "avg_ms":    pinger.avg_ms,
                     "max_ms":    pinger.max_ms,
+                    "paused":    host in self._paused,
                 }
         return snapshot
 
