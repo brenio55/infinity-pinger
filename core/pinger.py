@@ -32,7 +32,7 @@ class HostPinger(threading.Thread):
     um histórico circular de resultados.
     """
 
-    MAX_HISTORY = 200   # nº máximo de pontos no histórico
+    MAX_HISTORY = 3600   # 1h a 1s de intervalo
 
     def __init__(
         self,

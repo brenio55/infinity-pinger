@@ -11,7 +11,7 @@ from core.session import PingSession
 from core.reporter import export_csv, export_png, export_pdf
 
 from ui.host_panel  import HostPanel
-from ui.chart_panel import ChartPanel
+from ui.chart_panel import ChartPanel, WINDOW_OPTIONS
 from ui.dialogs     import SettingsDialog, ExportDialog
 
 ctk.set_appearance_mode("dark")
@@ -110,6 +110,28 @@ class App(ctk.CTk):
         _btn(tb, "💾  Exportar", self._open_export_dialog, width=95,
              ).pack(side="left", padx=2, pady=5)
 
+        # Divisor
+        ctk.CTkFrame(tb, width=1, height=20, fg_color=C_BORDER,
+                     corner_radius=0).pack(side="left", padx=6, pady=9)
+
+        # Seletor de janela de tempo
+        ctk.CTkLabel(tb, text="Janela:",
+                     font=ctk.CTkFont(size=10), text_color=C_TEXT
+                     ).pack(side="left", padx=(0, 2))
+        self._window_menu = ctk.CTkOptionMenu(
+            tb,
+            values=list(WINDOW_OPTIONS.keys()),
+            command=self._on_window_change,
+            width=72, height=26,
+            corner_radius=0,
+            fg_color=C_BTN, button_color=C_BTN_H,
+            button_hover_color="#2A2D40",
+            font=ctk.CTkFont(size=11),
+            dropdown_font=ctk.CTkFont(size=11),
+        )
+        self._window_menu.set("5m")
+        self._window_menu.pack(side="left", padx=2, pady=5)
+
         # Config fica à direita
         _btn(tb, "⚙", self._open_settings, width=34,
              ).pack(side="right", padx=(4, 10), pady=5)
@@ -181,6 +203,9 @@ class App(ctk.CTk):
 
     def _remove_host(self, host: str):
         self._session.remove_host(host)
+
+    def _on_window_change(self, key: str):
+        self._chart.set_window(key)
 
     def _toggle_host(self, host: str) -> bool:
         """Pausa ou retoma host. Retorna True se agora esta rodando."""
