@@ -1,156 +1,149 @@
 """
-ui/dialogs.py
-Diálogos: configurações e exportação de relatório.
+ui/dialogs.py  (v2)
+Dialogos planos e compactos.
 """
 
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 import threading
-import os
+
+C_BG    = "#0E0F14"
+C_PANEL = "#13151F"
+C_BORD  = "#1C1E2C"
+C_ACCT  = "#00B4D8"
+
+
+def _lbl(master, text, size=11, color="#8888AA", **kw):
+    return ctk.CTkLabel(master, text=text, font=ctk.CTkFont(size=size),
+                        text_color=color, **kw)
+
+
+def _btn(master, text, cmd, width=120, color="#1A1C28", hover="#22253A"):
+    return ctk.CTkButton(
+        master, text=text, command=cmd,
+        width=width, height=28, corner_radius=0,
+        fg_color=color, hover_color=hover,
+        font=ctk.CTkFont(size=11),
+    )
 
 
 class SettingsDialog(ctk.CTkToplevel):
-    """Configurações: intervalo e timeout."""
 
-    def __init__(self, master, current_interval: float, current_timeout: float,
-                 on_apply):
+    def __init__(self, master, current_interval, current_timeout, on_apply):
         super().__init__(master)
-        self.title("Configurações")
+        self.title("Configuracoes")
+        self.geometry("320x180")
         self.resizable(False, False)
-        self.grab_set()  # modal
+        self.grab_set()
+        self.configure(fg_color=C_BG)
         self._on_apply = on_apply
-
-        # Centraliza
-        self.geometry("340x220")
         self._build(current_interval, current_timeout)
 
     def _build(self, interval, timeout):
-        pad = {"padx": 20, "pady": 8}
+        # Titulo
+        ctk.CTkFrame(self, height=36, fg_color=C_PANEL, corner_radius=0
+                     ).pack(fill="x")
+        _lbl(self, "  Configuracoes", size=12, color=C_ACCT
+             ).place(x=0, y=8)
 
-        ctk.CTkLabel(self, text="⚙  Configurações",
-                     font=ctk.CTkFont(size=14, weight="bold")
-                     ).pack(**pad)
+        body = ctk.CTkFrame(self, fg_color="transparent", corner_radius=0)
+        body.pack(fill="both", expand=True, padx=16, pady=12)
 
-        # Intervalo
-        row1 = ctk.CTkFrame(self, fg_color="transparent")
-        row1.pack(fill="x", **pad)
-        ctk.CTkLabel(row1, text="Intervalo de ping (s):", width=180, anchor="w").pack(side="left")
-        self._interval_var = ctk.StringVar(value=str(interval))
-        ctk.CTkEntry(row1, textvariable=self._interval_var, width=80).pack(side="left")
+        for row_i, (label, default) in enumerate([
+            ("Intervalo (s):", interval),
+            ("Timeout  (s):", timeout),
+        ]):
+            body.rowconfigure(row_i, weight=1)
+            _lbl(body, label, size=11, anchor="w").grid(
+                row=row_i, column=0, sticky="w", pady=4
+            )
+            var = ctk.StringVar(value=str(default))
+            e = ctk.CTkEntry(
+                body, textvariable=var,
+                width=80, height=26, corner_radius=0,
+                border_color=C_BORD, fg_color=C_PANEL,
+                font=ctk.CTkFont(size=11),
+            )
+            e.grid(row=row_i, column=1, sticky="w", padx=(8, 0), pady=4)
+            if row_i == 0:
+                self._iv = var
+            else:
+                self._tv = var
 
-        # Timeout
-        row2 = ctk.CTkFrame(self, fg_color="transparent")
-        row2.pack(fill="x", **pad)
-        ctk.CTkLabel(row2, text="Timeout (s):", width=180, anchor="w").pack(side="left")
-        self._timeout_var = ctk.StringVar(value=str(timeout))
-        ctk.CTkEntry(row2, textvariable=self._timeout_var, width=80).pack(side="left")
-
-        # Nota
-        ctk.CTkLabel(
-            self,
-            text="⚠ Alterações aplicadas na próxima sessão.",
-            font=ctk.CTkFont(size=10), text_color="#888888",
-        ).pack(pady=(0, 8))
-
-        # Botões
-        btn_row = ctk.CTkFrame(self, fg_color="transparent")
-        btn_row.pack(pady=8)
-        ctk.CTkButton(btn_row, text="Cancelar", width=100,
-                      fg_color="#2A2A3E", hover_color="#3A3A4E",
-                      command=self.destroy).pack(side="left", padx=8)
-        ctk.CTkButton(btn_row, text="Aplicar", width=100,
-                      fg_color="#00B4D8", hover_color="#0096B7",
-                      command=self._apply).pack(side="left", padx=8)
+        # Botoes
+        brow = ctk.CTkFrame(self, fg_color="transparent", corner_radius=0)
+        brow.pack(fill="x", padx=16, pady=(0, 12))
+        _btn(brow, "Cancelar", self.destroy, width=100).pack(side="left")
+        _btn(brow, "Aplicar", self._apply, width=100,
+             color="#0A3040", hover="#0D4A60").pack(side="right")
 
     def _apply(self):
         try:
-            interval = float(self._interval_var.get())
-            timeout  = float(self._timeout_var.get())
-            assert 0.1 <= interval <= 60
-            assert 0.5 <= timeout  <= 30
-        except (ValueError, AssertionError):
-            messagebox.showerror("Erro", "Valores inválidos.\nIntervalo: 0.1–60s | Timeout: 0.5–30s")
+            iv = float(self._iv.get())
+            tv = float(self._tv.get())
+            assert 0.1 <= iv <= 60 and 0.5 <= tv <= 30
+        except Exception:
+            messagebox.showerror("Erro", "Valores invalidos.")
             return
-        self._on_apply(interval, timeout)
+        self._on_apply(iv, tv)
         self.destroy()
 
 
 class ExportDialog(ctk.CTkToplevel):
-    """Diálogo de exportação de relatório."""
 
-    def __init__(self, master, snapshot: dict,
-                 export_csv_fn, export_png_fn, export_pdf_fn):
+    def __init__(self, master, snapshot, export_csv_fn, export_png_fn, export_pdf_fn):
         super().__init__(master)
-        self.title("Exportar Relatório")
+        self.title("Exportar")
+        self.geometry("300x210")
         self.resizable(False, False)
         self.grab_set()
-        self.geometry("380x280")
+        self.configure(fg_color=C_BG)
 
-        self._snapshot = snapshot
-        self._csv = export_csv_fn
-        self._png = export_png_fn
-        self._pdf = export_pdf_fn
-
+        self._snap = snapshot
+        self._fns  = {
+            "CSV": (export_csv_fn, "csv", [("CSV", "*.csv")]),
+            "PNG": (export_png_fn, "png", [("PNG", "*.png")]),
+            "PDF": (export_pdf_fn, "pdf", [("PDF", "*.pdf")]),
+        }
         self._build()
 
     def _build(self):
-        pad = {"padx": 24, "pady": 10}
+        hdr = ctk.CTkFrame(self, height=36, fg_color=C_PANEL, corner_radius=0)
+        hdr.pack(fill="x")
+        hdr.pack_propagate(False)
+        _lbl(hdr, "  Exportar Relatorio", size=12, color=C_ACCT
+             ).pack(side="left", padx=8, pady=8)
 
-        ctk.CTkLabel(self, text="📊  Exportar Relatório",
-                     font=ctk.CTkFont(size=14, weight="bold")).pack(**pad)
-        ctk.CTkLabel(
-            self,
-            text="Escolha o formato de exportação:",
-            font=ctk.CTkFont(size=11), text_color="#AAAAAA",
-        ).pack(padx=24, pady=(0, 8))
+        body = ctk.CTkFrame(self, fg_color="transparent", corner_radius=0)
+        body.pack(fill="both", expand=True, padx=16, pady=12)
 
-        btn_cfg = {"width": 300, "height": 40, "corner_radius": 8}
+        labels = {
+            "CSV": ("  Dados CSV", "#0D3320", "#1A5532"),
+            "PNG": ("  Grafico PNG", "#0D2040", "#1A3A60"),
+            "PDF": ("  Relatorio PDF", "#300A0A", "#4A1515"),
+        }
+        for fmt, (txt, c, h) in labels.items():
+            _btn(body, txt, lambda f=fmt: self._export(f),
+                 width=260, color=c, hover=h
+                 ).pack(fill="x", pady=3)
 
-        ctk.CTkButton(
-            self, text="📄  Exportar CSV", **btn_cfg,
-            fg_color="#1B4332", hover_color="#2D6A4F",
-            command=lambda: self._export(self._csv, "CSV", "csv",
-                                         [("CSV", "*.csv")]),
-        ).pack(pady=4)
+        _btn(body, "Fechar", self.destroy, width=260
+             ).pack(fill="x", pady=(8, 0))
 
-        ctk.CTkButton(
-            self, text="🖼  Exportar Gráfico (PNG)", **btn_cfg,
-            fg_color="#0D3B66", hover_color="#1A5F8A",
-            command=lambda: self._export(self._png, "PNG", "png",
-                                         [("PNG", "*.png")]),
-        ).pack(pady=4)
-
-        ctk.CTkButton(
-            self, text="📑  Exportar Relatório PDF", **btn_cfg,
-            fg_color="#3D0C11", hover_color="#6A1020",
-            command=lambda: self._export(self._pdf, "PDF", "pdf",
-                                         [("PDF", "*.pdf")]),
-        ).pack(pady=4)
-
-        ctk.CTkButton(
-            self, text="Fechar", width=120,
-            fg_color="#2A2A3E", hover_color="#3A3A4E",
-            command=self.destroy,
-        ).pack(pady=12)
-
-    def _export(self, fn, label: str, ext: str, filetypes):
-        filepath = filedialog.asksaveasfilename(
-            defaultextension=f".{ext}",
-            filetypes=filetypes,
-            title=f"Salvar {label}",
+    def _export(self, fmt: str):
+        fn, ext, filetypes = self._fns[fmt]
+        path = filedialog.asksaveasfilename(
+            defaultextension=f".{ext}", filetypes=filetypes
         )
-        if not filepath:
+        if not path:
             return
         self.destroy()
 
         def run():
             try:
-                result = fn(self._snapshot, filepath)
-                messagebox.showinfo(
-                    "Exportado com sucesso!",
-                    f"Arquivo salvo em:\n{result}"
-                )
+                out = fn(self._snap, path)
+                messagebox.showinfo("Exportado", f"Salvo em:\n{out}")
             except Exception as e:
-                messagebox.showerror("Erro ao exportar", str(e))
+                messagebox.showerror("Erro", str(e))
 
         threading.Thread(target=run, daemon=True).start()

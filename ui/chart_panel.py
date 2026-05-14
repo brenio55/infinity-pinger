@@ -1,87 +1,148 @@
 """
-ui/chart_panel.py
-Painel central com grafico matplotlib embedded no CustomTkinter.
-Atualizacao em tempo real via after() do Tkinter (thread-safe).
+ui/chart_panel.py  (v2)
+Uma figura matplotlib com um subplot por host (empilhados).
+Design flat, compacto. Recriado dinamicamente quando hosts mudam.
 """
 
 import warnings
-import time
+import tkinter as tk
 from datetime import datetime
 from typing import Callable
-import tkinter as tk
-
-warnings.filterwarnings("ignore", message=".*tight_layout.*")
 
 import customtkinter as ctk
 import matplotlib
 matplotlib.use("TkAgg")
 import matplotlib.dates as mdates
 from matplotlib.figure import Figure
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
+warnings.filterwarnings("ignore", message=".*tight_layout.*")
 
-# Paleta de fundo escura
-BG_DARK  = "#0D0F1A"
-BG_PANEL = "#12152A"
-GRID_CLR = "#1E2240"
-TEXT_CLR = "#AAAACC"
+# ── Paleta ────────────────────────────────────────────────────
+BG       = "#0E0F14"     # fundo geral
+PANEL    = "#13151F"     # fundo dos axes
+GRID     = "#1C1E2C"     # linhas de grade
+TEXT     = "#8888AA"     # labels dos eixos
+DIVIDER  = "#1C1E2C"     # linha divisória entre hosts
+
+ROW_H_PX    = 110        # altura de cada subplot em pixels
+REFRESH_MS  = 900
 
 
 class ChartPanel(ctk.CTkFrame):
-
-    REFRESH_MS = 800   # intervalo de redesenho (ms)
+    """Painel scrollável com um gráfico por host."""
 
     def __init__(self, master, get_snapshot: Callable[[], dict], **kwargs):
+        kwargs.setdefault("corner_radius", 0)
         super().__init__(master, **kwargs)
         self.get_snapshot = get_snapshot
-        self._running = False
-        self._after_id = None
 
-        self._build()
+        self._running   = False
+        self._after_id  = None
+        self._last_hosts: list[str] = []   # rastrea mudanças na lista de hosts
 
-    # ── Construção do layout ──────────────────────────────
-    def _build(self):
-        # Figura matplotlib
-        self._fig = Figure(figsize=(10, 5), facecolor=BG_DARK)
+        # Container scrollável (tk nativo — melhor suporte com matplotlib)
+        self._scroll_frame = tk.Frame(self, bg=BG)
+        self._scroll_frame.pack(fill="both", expand=True)
 
-        # Sub-plots: latência (3/4) + loss (1/4)
-        gs = self._fig.add_gridspec(2, 1, height_ratios=[3, 1], hspace=0.35)
-        self._ax_lat  = self._fig.add_subplot(gs[0])
-        self._ax_loss = self._fig.add_subplot(gs[1])
+        # Canvas tk + scrollbar vertical
+        self._tk_canvas = tk.Canvas(
+            self._scroll_frame, bg=BG,
+            highlightthickness=0, bd=0,
+        )
+        self._scrollbar = tk.Scrollbar(
+            self._scroll_frame, orient="vertical",
+            command=self._tk_canvas.yview,
+        )
+        self._scrollbar.pack(side="right", fill="y")
+        self._tk_canvas.pack(side="left", fill="both", expand=True)
+        self._tk_canvas.configure(yscrollcommand=self._scrollbar.set)
 
-        for ax in (self._ax_lat, self._ax_loss):
-            ax.set_facecolor(BG_PANEL)
-            ax.tick_params(colors=TEXT_CLR, labelsize=8)
+        # Frame interno que contém a figura
+        self._inner = tk.Frame(self._tk_canvas, bg=BG)
+        self._inner_id = self._tk_canvas.create_window(
+            (0, 0), window=self._inner, anchor="nw"
+        )
+        self._inner.bind("<Configure>", self._on_inner_resize)
+        self._tk_canvas.bind("<Configure>", self._on_canvas_resize)
+
+        # Scroll com roda do mouse
+        self._tk_canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+
+        # Figura e canvas matplotlib
+        self._fig: Figure | None = None
+        self._mpl_canvas: FigureCanvasTkAgg | None = None
+        self._axes = {}     # host → Axes
+
+    # ── Scroll helpers ────────────────────────────────────────
+    def _on_inner_resize(self, event):
+        self._tk_canvas.configure(scrollregion=self._tk_canvas.bbox("all"))
+
+    def _on_canvas_resize(self, event):
+        self._tk_canvas.itemconfig(self._inner_id, width=event.width)
+        # Recria figura com nova largura
+        if self._mpl_canvas and self._last_hosts:
+            self._rebuild_figure(self._last_hosts)
+
+    def _on_mousewheel(self, event):
+        self._tk_canvas.yview_scroll(-1 * (event.delta // 120), "units")
+
+    # ── Rebuild da figura ─────────────────────────────────────
+    def _rebuild_figure(self, hosts: list[str]):
+        """Recria a figura matplotlib com N subplots (um por host)."""
+        n = max(len(hosts), 1)
+
+        # Largura em polegadas baseada na largura do canvas tk
+        try:
+            w_px = self._tk_canvas.winfo_width() or 800
+        except Exception:
+            w_px = 800
+        dpi   = 96
+        w_in  = max(w_px / dpi, 4)
+        h_in  = (n * ROW_H_PX) / dpi
+
+        # Destrói canvas anterior
+        if self._mpl_canvas:
+            self._mpl_canvas.get_tk_widget().destroy()
+            self._mpl_canvas = None
+        if self._fig:
+            import matplotlib.pyplot as plt
+            plt.close(self._fig)
+            self._fig = None
+
+        self._fig = Figure(
+            figsize=(w_in, h_in), dpi=dpi,
+            facecolor=BG,
+        )
+        self._axes = {}
+
+        for i, host in enumerate(hosts):
+            ax = self._fig.add_subplot(n, 1, i + 1)
+            ax.set_facecolor(PANEL)
+            ax.tick_params(colors=TEXT, labelsize=7, length=2, pad=2)
             for spine in ax.spines.values():
-                spine.set_color(GRID_CLR)
-            ax.grid(True, color=GRID_CLR, linewidth=0.6, linestyle="--")
-            ax.yaxis.label.set_color(TEXT_CLR)
-            ax.xaxis.label.set_color(TEXT_CLR)
-            ax.title.set_color("#DDDDFF")
+                spine.set_color(GRID)
+                spine.set_linewidth(0.5)
+            ax.grid(True, color=GRID, linewidth=0.5, linestyle="-")
+            ax.set_ylabel("ms", fontsize=7, color=TEXT, labelpad=2)
+            self._axes[host] = ax
 
-        self._ax_lat.set_title("Latencia (ms)", fontsize=11, pad=6)
-        self._ax_lat.set_ylabel("ms", fontsize=9)
+        self._fig.subplots_adjust(
+            left=0.06, right=0.99,
+            top=0.97, bottom=0.05,
+            hspace=0.08,
+        )
 
-        self._ax_loss.set_title("Perda de Pacotes (%)", fontsize=9, pad=4)
-        self._ax_loss.set_ylabel("%", fontsize=9)
-        self._ax_loss.set_ylim(-2, 105)
-
-        # Frame nativo tk para isolar o matplotlib do CTkFrame
-        chart_container = tk.Frame(self, bg=BG_DARK)
-        chart_container.pack(fill="both", expand=True)
-
-        # Canvas matplotlib — nomeado _mpl_canvas para nao colidir com CTkFrame._canvas
-        self._mpl_canvas = FigureCanvasTkAgg(self._fig, master=chart_container)
+        self._mpl_canvas = FigureCanvasTkAgg(self._fig, master=self._inner)
         self._mpl_canvas.get_tk_widget().pack(fill="both", expand=True)
+        self._mpl_canvas.draw()
 
-        # Toolbar matplotlib (zoom, pan, save)
-        toolbar_frame = tk.Frame(self, bg="#0D0F1A")
-        toolbar_frame.pack(fill="x", side="bottom")
-        toolbar = NavigationToolbar2Tk(self._mpl_canvas, toolbar_frame)
-        toolbar.config(background="#0D0F1A")
-        toolbar.update()
+        # Atualiza scroll region
+        self._tk_canvas.configure(
+            scrollregion=(0, 0, w_px, n * ROW_H_PX)
+        )
 
-    # ── Controle de atualizacao ───────────────────────────
+    # ── Controle de refresh ───────────────────────────────────
     def start_refresh(self):
         self._running = True
         self._schedule()
@@ -96,111 +157,103 @@ class ChartPanel(ctk.CTkFrame):
 
     def _schedule(self):
         if self._running:
-            self._after_id = self.after(self.REFRESH_MS, self._refresh)
+            self._after_id = self.after(REFRESH_MS, self._refresh)
 
-    # ── Redesenho ─────────────────────────────────────────
+    # ── Ciclo principal ───────────────────────────────────────
     def _refresh(self):
         try:
             snapshot = self.get_snapshot()
-            self._render(snapshot)
+            hosts = list(snapshot.keys())
+
+            # Recria figura se a lista de hosts mudou
+            if hosts != self._last_hosts:
+                self._last_hosts = hosts
+                self._rebuild_figure(hosts)
+
+            if hosts and self._fig:
+                self._render(snapshot)
         except Exception:
             pass
         self._schedule()
 
+    # ── Renderização ──────────────────────────────────────────
     def _render(self, snapshot: dict):
-        self._ax_lat.cla()
-        self._ax_loss.cla()
-
-        # Re-aplicar estilos apos cla()
-        for ax in (self._ax_lat, self._ax_loss):
-            ax.set_facecolor(BG_PANEL)
-            ax.tick_params(colors=TEXT_CLR, labelsize=8)
-            for spine in ax.spines.values():
-                spine.set_color(GRID_CLR)
-            ax.grid(True, color=GRID_CLR, linewidth=0.6, linestyle="--")
-
-        self._ax_lat.set_title("Latencia (ms)", fontsize=11, pad=6, color="#DDDDFF")
-        self._ax_lat.set_ylabel("ms", fontsize=9, color=TEXT_CLR)
-        self._ax_loss.set_title("Perda de Pacotes (%)", fontsize=9, pad=4, color="#DDDDFF")
-        self._ax_loss.set_ylabel("%", fontsize=9, color=TEXT_CLR)
-        self._ax_loss.set_ylim(-2, 105)
-
-        hosts = list(snapshot.keys())
-        loss_vals   = []
-        loss_colors = []
-
         for host, data in snapshot.items():
+            ax = self._axes.get(host)
+            if ax is None:
+                continue
+
             color    = data["color"]
             ts_list  = data["timestamps"]
             lat_list = data["latencies"]
+            loss     = data["loss_pct"]
+            avg      = data["avg_ms"]
+            cur      = lat_list[-1] if lat_list else None
 
-            loss_vals.append(data["loss_pct"])
-            loss_colors.append(color)
+            ax.cla()
+            ax.set_facecolor(PANEL)
+            ax.tick_params(colors=TEXT, labelsize=7, length=2, pad=2)
+            for spine in ax.spines.values():
+                spine.set_color(GRID)
+                spine.set_linewidth(0.5)
+            ax.grid(True, color=GRID, linewidth=0.5, linestyle="-")
+            ax.set_ylabel("ms", fontsize=7, color=TEXT, labelpad=2)
 
-            if not ts_list:
-                continue
+            if ts_list:
+                datetimes = [datetime.fromtimestamp(t) for t in ts_list]
+                lats = [l if l is not None else float("nan") for l in lat_list]
 
-            datetimes = [datetime.fromtimestamp(t) for t in ts_list]
-            lats = [l if l is not None else float("nan") for l in lat_list]
+                # Área preenchida sob a linha
+                ax.fill_between(
+                    datetimes, lats,
+                    alpha=0.15, color=color,
+                )
+                ax.plot(
+                    datetimes, lats,
+                    color=color, linewidth=1.2,
+                    solid_capstyle="round",
+                )
 
-            self._ax_lat.plot(
-                datetimes, lats,
-                color=color, linewidth=1.5,
-                label=host,
-                marker="o", markersize=2.5, markevery=max(1, len(lats)//30),
+                # Timeouts → barras verticais vermelhas
+                for i, lat in enumerate(lat_list):
+                    if lat is None and i < len(datetimes):
+                        ax.axvline(
+                            datetimes[i], color="#CC2233",
+                            alpha=0.4, linewidth=0.8,
+                        )
+
+                ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
+                ax.tick_params(axis="x", labelsize=6, rotation=0)
+
+            # ── Label do host (canto superior esquerdo) ───────
+            loss_color = (
+                "#33CC66" if loss == 0 else
+                "#FFAA00" if loss <= 10 else
+                "#FF3344"
+            )
+            cur_str = f"{cur:.0f} ms" if cur is not None else "—"
+            avg_str = f"avg {avg:.0f}" if avg is not None else ""
+            label = (
+                f"  {host}    "
+                f"{cur_str}    "
+                f"{avg_str}    "
+                f"loss {loss:.0f}%"
+            )
+            ax.set_title(
+                label,
+                loc="left",
+                fontsize=8,
+                color=color,
+                pad=3,
+                fontweight="bold",
+            )
+            # Indicador de loss no título
+            ax.set_title(
+                f"loss {loss:.0f}%  ",
+                loc="right",
+                fontsize=7,
+                color=loss_color,
+                pad=3,
             )
 
-            # Marcar timeouts com linha vertical vermelha
-            for i, lat in enumerate(lat_list):
-                if lat is None and i < len(datetimes):
-                    self._ax_lat.axvline(
-                        datetimes[i], color="#FF3355",
-                        alpha=0.25, linewidth=0.8,
-                    )
-
-        # Barras de loss
-        if hosts:
-            bar_positions = range(len(hosts))
-            bars = self._ax_loss.bar(
-                bar_positions, loss_vals,
-                color=loss_colors, alpha=0.85, width=0.5,
-            )
-            self._ax_loss.set_xticks(list(bar_positions))
-            self._ax_loss.set_xticklabels(hosts, fontsize=8, color=TEXT_CLR)
-            for bar, val in zip(bars, loss_vals):
-                if val > 0:
-                    self._ax_loss.text(
-                        bar.get_x() + bar.get_width() / 2,
-                        bar.get_height() + 1.5,
-                        f"{val:.1f}%",
-                        ha="center", va="bottom",
-                        fontsize=7, color="#EEEEEE",
-                    )
-
-        # Formato do eixo X de latencia
-        if any(snapshot.values()):
-            self._ax_lat.xaxis.set_major_formatter(
-                mdates.DateFormatter("%H:%M:%S")
-            )
-            try:
-                self._fig.autofmt_xdate(rotation=25, ha="right")
-            except Exception:
-                pass
-
-        if hosts:
-            self._ax_lat.legend(
-                loc="upper left", fontsize=8,
-                facecolor="#1A1A2E", edgecolor=GRID_CLR,
-                labelcolor="#EEEEEE",
-            )
-
-        try:
-            self._fig.tight_layout(pad=1.0)
-        except Exception:
-            pass
         self._mpl_canvas.draw_idle()
-
-    def redraw_now(self):
-        """Forca redesenho imediato."""
-        snapshot = self.get_snapshot()
-        self._render(snapshot)
