@@ -28,8 +28,13 @@ from reportlab.lib.enums import TA_CENTER
 
 
 # ── Diretório padrão de relatórios ────────────────────────
-REPORTS_DIR = Path(__file__).parent.parent / "reports"
-REPORTS_DIR.mkdir(exist_ok=True)
+if os.name == "nt":
+    base_dir = Path(os.environ.get("USERPROFILE", Path.home())) / "Documents" / "InfinityPinger"
+else:
+    base_dir = Path.home() / "Documents" / "InfinityPinger"
+
+REPORTS_DIR = base_dir / "reports"
+REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _ts_label() -> str:
