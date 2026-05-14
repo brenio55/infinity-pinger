@@ -50,10 +50,15 @@ class App(ctk.CTk):
         self.minsize(800, 480)
         self.configure(fg_color=C_BG)
 
-        try:
-            self.iconbitmap("assets/icon.ico")
-        except Exception:
-            pass
+        import os
+        from PIL import Image, ImageTk
+        self._logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logo.png")
+        if os.path.exists(self._logo_path):
+            try:
+                self._icon_image = ImageTk.PhotoImage(file=self._logo_path)
+                self.wm_iconphoto(True, self._icon_image)
+            except Exception:
+                pass
 
         self._interval = 1.0
         self._timeout  = 2.0
@@ -75,12 +80,32 @@ class App(ctk.CTk):
         tb.pack(fill="x", side="top")
         tb.pack_propagate(False)
 
-        # Logo
+        # Logo Image
+        import os
+        from PIL import Image
+        pad_left = 12
+        if hasattr(self, "_logo_path") and os.path.exists(self._logo_path):
+            img = ctk.CTkImage(light_image=Image.open(self._logo_path), size=(24, 24))
+            ctk.CTkLabel(tb, text="", image=img).pack(side="left", padx=(12, 4))
+            pad_left = 0
+
+        # Title: Orkestrae / InfinityPinger
+        title_frame = ctk.CTkFrame(tb, fg_color="transparent")
+        title_frame.pack(side="left", padx=(pad_left, 16))
+
         ctk.CTkLabel(
-            tb, text=f"◈ {APP_NAME}",
+            title_frame, text="Orkestrae",
+            font=ctk.CTkFont(size=9, weight="bold"),
+            text_color="#666688",
+            height=12
+        ).pack(anchor="w", pady=(2, 0))
+
+        ctk.CTkLabel(
+            title_frame, text=APP_NAME,
             font=ctk.CTkFont(size=14, weight="bold"),
             text_color=C_ACCENT,
-        ).pack(side="left", padx=(12, 16))
+            height=16
+        ).pack(anchor="w", pady=(0, 2))
 
         # Divisor vertical
         ctk.CTkFrame(tb, width=1, height=20, fg_color=C_BORDER,
