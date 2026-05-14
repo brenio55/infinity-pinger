@@ -51,7 +51,23 @@ class App(ctk.CTk):
         self.configure(fg_color=C_BG)
 
         import os
-        self._icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "icon.ico")
+        import sys
+        import ctypes
+
+        # Garante que o Windows use o ícone do app na barra de tarefas (e não o do python/terminal)
+        try:
+            myappid = 'orkestrae.infinitypinger.0.2'
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+        except Exception:
+            pass
+
+        # Resolve o caminho base quer rodando via source quer rodando empacotado (PyInstaller)
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            base_dir = sys._MEIPASS
+        else:
+            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+        self._icon_path = os.path.join(base_dir, "icon.ico")
         if os.path.exists(self._icon_path):
             try:
                 self.iconbitmap(self._icon_path)

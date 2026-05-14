@@ -19,9 +19,9 @@ Name: "desktopicon"; Description: "Criar icone na Area de Trabalho"; GroupDescri
 Source: "dist\InfinityPinger\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\InfinityPinger"; Filename: "{app}\InfinityPinger.exe"; IconFilename: "{app}\icon.ico"
+Name: "{group}\InfinityPinger"; Filename: "{app}\InfinityPinger.exe"
 Name: "{group}\Desinstalar InfinityPinger"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\InfinityPinger"; Filename: "{app}\InfinityPinger.exe"; IconFilename: "{app}\icon.ico"; Tasks: desktopicon
+Name: "{autodesktop}\InfinityPinger"; Filename: "{app}\InfinityPinger.exe"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\InfinityPinger.exe"; Description: "Abrir o InfinityPinger agora"; Flags: nowait postinstall skipifsilent
