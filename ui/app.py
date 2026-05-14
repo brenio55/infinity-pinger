@@ -18,7 +18,7 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 APP_NAME    = "InfinityPinger"
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.2.0"
 
 # ── Paleta flat ───────────────────────────────────────────────
 C_BG      = "#0E0F14"
@@ -173,7 +173,11 @@ class App(ctk.CTk):
 
         # Config fica à direita
         _btn(tb, "⚙", self._open_settings, width=34,
-             ).pack(side="right", padx=(4, 10), pady=5)
+             ).pack(side="right", padx=(2, 10), pady=5)
+        
+        # Botão Sobre (?)
+        _btn(tb, "?", self._show_about, width=34,
+             ).pack(side="right", padx=(2, 2), pady=5)
 
         # Status inline na toolbar (direita)
         self._status_lbl = ctk.CTkLabel(
@@ -295,6 +299,71 @@ class App(ctk.CTk):
             current_timeout=self._timeout,
             on_apply=self._apply_settings,
         )
+
+    def _show_about(self):
+        import webbrowser
+        import os
+        import sys
+        from PIL import Image, ImageTk
+        from datetime import datetime
+
+        top = ctk.CTkToplevel(self)
+        top.title("Sobre o InfinityPinger")
+        top.geometry("400x380")
+        top.resizable(False, False)
+        top.configure(fg_color=C_BG)
+        top.attributes("-topmost", True)
+        
+        # Centralizar na tela pai
+        top.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width() - 400) // 2
+        y = self.winfo_y() + (self.winfo_height() - 380) // 2
+        top.geometry(f"+{x}+{y}")
+
+        # Adicionar o icone do titulo se disponivel
+        if hasattr(self, '_icon_path') and os.path.exists(self._icon_path):
+            try:
+                top.after(200, lambda: top.iconbitmap(self._icon_path))
+            except Exception:
+                pass
+
+        # Container principal
+        frame = ctk.CTkFrame(top, fg_color=C_PANEL, corner_radius=8)
+        frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        # Logo centralizada
+        logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logo.png")
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            logo_path = os.path.join(sys._MEIPASS, "logo.png")
+
+        if os.path.exists(logo_path):
+            img = ctk.CTkImage(light_image=Image.open(logo_path),
+                               dark_image=Image.open(logo_path),
+                               size=(80, 80))
+            ctk.CTkLabel(frame, image=img, text="").pack(pady=(20, 10))
+
+        # Título
+        ctk.CTkLabel(frame, text=f"{APP_NAME} v{APP_VERSION}", 
+                     font=ctk.CTkFont(size=18, weight="bold"), text_color=C_ACCENT).pack(pady=(0, 5))
+
+        # Informações de Compilação
+        compile_date = datetime.now().strftime("%d/%m/%Y")
+        ctk.CTkLabel(frame, text=f"Data de Compilação: {compile_date}", 
+                     font=ctk.CTkFont(size=11), text_color=C_TEXT).pack(pady=(0, 15))
+
+        # Autor
+        ctk.CTkLabel(frame, text="Desenvolvido por:", 
+                     font=ctk.CTkFont(size=12, weight="bold"), text_color="#DDDDDD").pack(pady=(0, 2))
+        ctk.CTkLabel(frame, text="Brenio Filho (brenio55 no GitHub)", 
+                     font=ctk.CTkFont(size=12), text_color="#AAAAAA").pack(pady=(0, 15))
+
+        # Orkestrae Link
+        ctk.CTkLabel(frame, text="Parte do grupo Orkestrae", 
+                     font=ctk.CTkFont(size=12), text_color="#DDDDDD").pack(pady=(0, 2))
+        link_lbl = ctk.CTkLabel(frame, text="Orkestrae.com.br", 
+                                font=ctk.CTkFont(size=12, underline=True), text_color="#00B4D8", cursor="hand2")
+        link_lbl.pack(pady=(0, 10))
+        link_lbl.bind("<Button-1>", lambda e: webbrowser.open_new("https://orkestrae.com.br"))
 
     def _apply_settings(self, interval: float, timeout: float):
         self._interval = interval
