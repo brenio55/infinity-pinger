@@ -25,10 +25,10 @@ GRID     = "#1C1E2C"     # linhas de grade
 TEXT     = "#8888AA"     # labels dos eixos
 DIVIDER  = "#1C1E2C"     # linha divisória entre hosts
 
-ROW_H_PX    = 140        # altura de cada subplot em pixels (comporta 1000ms + titulo)
+ROW_H_PX    = 140        # altura de cada subplot em pixels
 GAP_PX      = 20         # espaco entre subplots em pixels
 REFRESH_MS  = 900
-Y_MIN_MS    = 1000       # escala minima do eixo Y (ms)
+Y_MIN_MS    = 200        # escala minima do eixo Y (ms)
 
 
 class ChartPanel(ctk.CTkFrame):
@@ -130,15 +130,14 @@ class ChartPanel(ctk.CTkFrame):
             ax.set_ylabel("ms", fontsize=7, color=TEXT, labelpad=2)
             self._axes[host] = ax
 
-        # hspace em fracao da altura media dos axes
-        # axes_h_px = ROW_H_PX - margem_titulo (~25px) = ~115px
-        # hspace = GAP_PX / axes_h_px
-        axes_h_px = ROW_H_PX - 25
+        # hspace em fracao da altura media dos axes.
+        # Labels agora sao overlay interno — hspace so precisa de gap visual.
+        axes_h_px = ROW_H_PX - 10
         hspace = GAP_PX / max(axes_h_px, 1)
 
         self._fig.subplots_adjust(
             left=0.06, right=0.99,
-            top=0.97, bottom=0.03,
+            top=0.99, bottom=0.03,
             hspace=hspace,
         )
 
@@ -252,7 +251,7 @@ class ChartPanel(ctk.CTkFrame):
                 ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
                 ax.tick_params(axis="x", labelsize=6, rotation=0)
 
-            # ── Titulo do subplot ────────────────────────────
+            # ── Label overlay dentro do axes (sem corte pelo hspace) ──
             label_color = "#334455" if paused else color
             loss_color = (
                 "#33CC66" if loss == 0 else
@@ -262,20 +261,25 @@ class ChartPanel(ctk.CTkFrame):
             cur_str = f"{cur:.0f} ms" if cur is not None and not paused else ("pausado" if paused else "—")
             avg_str = f"avg {avg:.0f}" if avg is not None and not paused else ""
 
-            ax.set_title(
-                f"  {host}    {cur_str}    {avg_str}",
-                loc="left",
-                fontsize=8,
-                color=label_color,
-                pad=3,
+            # Label esquerdo: host + stats (dentro do axes, canto superior esq)
+            ax.text(
+                0.005, 0.97,
+                f"{host}   {cur_str}   {avg_str}",
+                transform=ax.transAxes,
+                ha="left", va="top",
+                fontsize=8, color=label_color,
                 fontweight="bold",
+                clip_on=False,
             )
-            ax.set_title(
-                f"loss {loss:.0f}%  " if not paused else "",
-                loc="right",
-                fontsize=7,
-                color=loss_color,
-                pad=3,
-            )
+            # Label direito: loss% (canto superior direito)
+            if not paused:
+                ax.text(
+                    0.998, 0.97,
+                    f"loss {loss:.0f}%",
+                    transform=ax.transAxes,
+                    ha="right", va="top",
+                    fontsize=7, color=loss_color,
+                    clip_on=False,
+                )
 
         self._mpl_canvas.draw_idle()
