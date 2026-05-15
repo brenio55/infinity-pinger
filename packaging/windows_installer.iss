@@ -1,6 +1,6 @@
 [Setup]
 AppName=InfinityPinger
-AppVersion=0.2.0
+AppVersion=0.3.0
 AppPublisher=Orkestrae
 DefaultDirName={autopf}\InfinityPinger
 DefaultGroupName=InfinityPinger
@@ -9,7 +9,7 @@ Compression=lzma2
 SolidCompression=yes
 ; O output vai para a pasta 'releases' na raiz
 OutputDir=..\releases
-OutputBaseFilename=InfinityPinger_Setup_v0.2.0_Win
+OutputBaseFilename=InfinityPinger_Setup_v0.3.0_Win
 
 [Tasks]
 Name: "desktopicon"; Description: "Criar icone na Area de Trabalho"; GroupDescription: "Atalhos Adicionais:"

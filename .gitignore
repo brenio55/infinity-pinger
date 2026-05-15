@@ -18,3 +18,5 @@ reports/*.csv
 .idea/
 .vscode/
 *.log
+packaging/temp/
+releases/

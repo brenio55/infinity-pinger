@@ -13,17 +13,6 @@ from typing import Optional, Callable
 
 
 # ─────────────────────────────────────────────
-# Estrutura de resultado de um único ping
-# ─────────────────────────────────────────────
-@dataclass
-class PingResult:
-    host: str
-    timestamp: float
-    latency_ms: Optional[float]   # None = timeout / perda de pacote
-    success: bool
-
-
-# ─────────────────────────────────────────────
 # Worker de ping por host
 # ─────────────────────────────────────────────
 class HostPinger(threading.Thread):
@@ -39,7 +28,7 @@ class HostPinger(threading.Thread):
         host: str,
         interval: float = 1.0,
         timeout: float = 2.0,
-        on_result: Optional[Callable[[PingResult], None]] = None,
+        on_result: Optional[Callable[[tuple], None]] = None,
     ):
         super().__init__(daemon=True)
         self.host = host
@@ -50,13 +39,16 @@ class HostPinger(threading.Thread):
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
 
-        # Histórico: deque de PingResult
-        self.history: deque[PingResult] = deque(maxlen=self.MAX_HISTORY)
+        # Histórico (separado para otimização de memória)
+        self.timestamps: deque[float] = deque(maxlen=self.MAX_HISTORY)
+        self.latencies: deque[Optional[float]] = deque(maxlen=self.MAX_HISTORY)
 
         # Estatísticas acumuladas
         self._sent = 0
         self._received = 0
-        self._latencies: list[float] = []
+        self._min_ms: Optional[float] = None
+        self._max_ms: Optional[float] = None
+        self._sum_ms: float = 0.0
 
     # ── Propriedades de estatística ──────────────────────
     @property
@@ -75,29 +67,34 @@ class HostPinger(threading.Thread):
 
     @property
     def min_ms(self) -> Optional[float]:
-        return min(self._latencies) if self._latencies else None
+        return self._min_ms
 
     @property
     def avg_ms(self) -> Optional[float]:
-        return sum(self._latencies) / len(self._latencies) if self._latencies else None
+        return (self._sum_ms / self._received) if self._received > 0 else None
 
     @property
     def max_ms(self) -> Optional[float]:
-        return max(self._latencies) if self._latencies else None
+        return self._max_ms
 
     # ── Ciclo principal ───────────────────────────────────
     def run(self):
         while not self._stop_event.is_set():
-            result = self._do_ping()
+            ts, latency, success = self._do_ping()
             with self._lock:
-                self.history.append(result)
+                self.timestamps.append(ts)
+                self.latencies.append(latency)
                 self._sent += 1
-                if result.success and result.latency_ms is not None:
+                if success and latency is not None:
                     self._received += 1
-                    self._latencies.append(result.latency_ms)
+                    self._sum_ms += latency
+                    if self._min_ms is None or latency < self._min_ms:
+                        self._min_ms = latency
+                    if self._max_ms is None or latency > self._max_ms:
+                        self._max_ms = latency
 
             if self.on_result:
-                self.on_result(result)
+                self.on_result((ts, latency, success))
 
             self._stop_event.wait(self.interval)
 
@@ -105,7 +102,7 @@ class HostPinger(threading.Thread):
         self._stop_event.set()
 
     # ── Execução do ping via subprocess ───────────────────
-    def _do_ping(self) -> PingResult:
+    def _do_ping(self) -> tuple[float, Optional[float], bool]:
         ts = time.time()
         try:
             # Windows: ping -n 1 -w <timeout_ms> <host>
@@ -123,12 +120,12 @@ class HostPinger(threading.Thread):
             latency = self._parse_latency_windows(output)
 
             if latency is not None:
-                return PingResult(self.host, ts, latency, True)
+                return (ts, latency, True)
             else:
-                return PingResult(self.host, ts, None, False)
+                return (ts, None, False)
 
         except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-            return PingResult(self.host, ts, None, False)
+            return (ts, None, False)
 
     @staticmethod
     def _parse_latency_windows(output: str) -> Optional[float]:
@@ -144,6 +141,6 @@ class HostPinger(threading.Thread):
         return None
 
     # ── Snapshot thread-safe do histórico ────────────────
-    def get_history_snapshot(self) -> list[PingResult]:
+    def get_history_snapshot(self) -> tuple[list[float], list[Optional[float]]]:
         with self._lock:
-            return list(self.history)
+            return list(self.timestamps), list(self.latencies)

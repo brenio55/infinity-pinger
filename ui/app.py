@@ -18,7 +18,7 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 APP_NAME    = "InfinityPinger"
-APP_VERSION = "0.2.0"
+APP_VERSION = "0.3.0"
 
 # ── Paleta flat ───────────────────────────────────────────────
 C_BG      = "#0E0F14"
@@ -56,7 +56,7 @@ class App(ctk.CTk):
 
         # Garante que o Windows use o ícone do app na barra de tarefas (e não o do python/terminal)
         try:
-            myappid = 'orkestrae.infinitypinger.0.2'
+            myappid = 'orkestrae.infinitypinger.0.3'
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
         except Exception:
             pass

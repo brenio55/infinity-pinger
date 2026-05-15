@@ -4,7 +4,7 @@
 # Execute este script a partir da pasta 'build'
 # ===================================================
 
-VERSION="0.2.0"
+VERSION="0.3.0"
 APP_NAME="infinitypinger"
 ROOT_DIR=".."
 DEB_DIR="deb_package"

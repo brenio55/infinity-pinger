@@ -6,7 +6,7 @@ mantém estado global e notifica a UI via callbacks.
 
 import threading
 from typing import Callable, Optional
-from .pinger import HostPinger, PingResult
+from .pinger import HostPinger
 
 
 # Paleta de cores para os hosts no gráfico
@@ -71,10 +71,13 @@ class PingSession:
         """Limpa histórico de todos os hosts sem parar os pingers."""
         with self._lock:
             for pinger in self._pingers.values():
-                pinger.history.clear()
+                pinger.timestamps.clear()
+                pinger.latencies.clear()
                 pinger._sent = 0
                 pinger._received = 0
-                pinger._latencies.clear()
+                pinger._min_ms = None
+                pinger._max_ms = None
+                pinger._sum_ms = 0.0
 
     # ── Gerenciamento de hosts ────────────────────────────
     def add_host(self, host: str) -> bool:
@@ -136,7 +139,13 @@ class PingSession:
                 timeout=self.timeout,
                 on_result=self._on_ping_result,
             )
-            pinger.history = old.history   # preserva histórico
+            pinger.timestamps = old.timestamps   # preserva histórico
+            pinger.latencies = old.latencies
+            pinger._sent = old._sent
+            pinger._received = old._received
+            pinger._min_ms = old._min_ms
+            pinger._max_ms = old._max_ms
+            pinger._sum_ms = old._sum_ms
             self._pingers[host] = pinger
             pinger.start()
 
@@ -160,9 +169,7 @@ class PingSession:
         snapshot = {}
         with self._lock:
             for host, pinger in self._pingers.items():
-                history = pinger.get_history_snapshot()
-                timestamps = [r.timestamp for r in history]
-                latencies  = [r.latency_ms if r.success else None for r in history]
+                timestamps, latencies = pinger.get_history_snapshot()
                 snapshot[host] = {
                     "color":     self._colors[host],
                     "timestamps": timestamps,
@@ -178,6 +185,6 @@ class PingSession:
         return snapshot
 
     # ── Callback interno ──────────────────────────────────
-    def _on_ping_result(self, result: PingResult):
+    def _on_ping_result(self, result: tuple):
         if self.on_update:
             self.on_update()
